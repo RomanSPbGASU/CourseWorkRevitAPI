@@ -9,6 +9,7 @@ using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
 #endregion
 
+///
 namespace CourseWorkRevitAPI
 {
     [Transaction(TransactionMode.Manual)]
@@ -26,6 +27,7 @@ namespace CourseWorkRevitAPI
 
             // Access current selection
 
+            
             Selection sel = uidoc.Selection;
             // This is my mew file
 
