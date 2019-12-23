@@ -6,22 +6,25 @@ using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using System.Linq;
 
 namespace CourseWorkRevitAPI
 {
     [Transaction(TransactionMode.Manual)]
     class SharedParamCreator : IExternalCommand
     {
-        const string _filename = "C:/Users/roman/source/repos/CourseWorkRevitAPI/SharedParams.txt";
+        const string _filename = "SharedParams.txt";
         const string _groupname = "Coursework Parameters";
         const string _defname = "SP";
+        public static List<Category> categories;
         ParameterType _deftype = ParameterType.Number;
 
         BuiltInCategory[] targets = new BuiltInCategory[] {
-          BuiltInCategory.OST_Doors,
-          BuiltInCategory.OST_Walls,
-          BuiltInCategory.OST_IOSModelGroups, // doc.Settings.Categories.get_Item returns null
-          BuiltInCategory.OST_Lines // model lines
+            BuiltInCategory.OST_Doors,
+            BuiltInCategory.OST_Walls,
+            BuiltInCategory.OST_Windows,
+            BuiltInCategory.OST_Floors,
+            BuiltInCategory.OST_Roofs,
         };
 
         Category GetCategory(
@@ -84,18 +87,17 @@ namespace CourseWorkRevitAPI
         bool CreateSharedParameter(
           Document doc,
           Category cat,
-          int nameSuffix,
-          bool typeParameter)
+          int? nameSuffix,
+          bool typeParameter,
+          string parameterName = null)
         {
             Application app = doc.Application;
 
-            Autodesk.Revit.Creation.Application ca
-              = app.Create;
+            Autodesk.Revit.Creation.Application ca = app.Create;
 
             // get or set the current shared params filename:
 
-            string filename
-              = app.SharedParametersFilename;
+            string filename = app.SharedParametersFilename;
 
             if (0 == filename.Length)
             {
@@ -152,7 +154,8 @@ namespace CourseWorkRevitAPI
 
             // get or create the shared params definition:
 
-            string defname = _defname + nameSuffix.ToString();
+            string defname = parameterName ?? _defname + nameSuffix?.ToString();
+            Debug.Print($"Creating parameter name: {defname}");
 
             Definition definition = group.Definitions.get_Item(
               defname);
@@ -161,9 +164,7 @@ namespace CourseWorkRevitAPI
             {
                 //definition = group.Definitions.Create( defname, _deftype, visible ); // 2014
 
-                ExternalDefinitionCreationOptions opt
-                  = new ExternalDefinitionCreationOptions(
-                    defname, _deftype);
+                ExternalDefinitionCreationOptions opt = new ExternalDefinitionCreationOptions(defname, _deftype);
 
                 opt.Visible = visible;
 
@@ -179,8 +180,20 @@ namespace CourseWorkRevitAPI
 
             // create the category set containing our category for binding:
 
-            CategorySet catSet = ca.NewCategorySet();
-            catSet.Insert(cat);
+            if (SharedParamCreator.categories == null)
+            {
+                categories = new List<Category> { cat };
+            }
+            else
+            {
+                SharedParamCreator.categories.Add(cat);
+            }
+
+            var catSet = ca.NewCategorySet();
+            foreach(var category in SharedParamCreator.categories)
+            {
+                catSet.Insert(category);
+            }
 
             // bind the param:
 
@@ -216,7 +229,31 @@ namespace CourseWorkRevitAPI
             return true;
         }
 
-        public Result Execute(
+        /// <summary>
+        /// This is dirty hack for processing List of categories
+        /// </summary>
+        /// <param name="doc"></param>
+        /// <param name="cat"></param>
+        /// <param name="nameSuffix"></param>
+        /// <param name="typeParameter"></param>
+        /// <param name="parameterName"></param>
+        /// <returns></returns>
+        bool CreateSharedParameter(
+            Document doc,
+            List<BuiltInCategory> cat,
+            int? nameSuffix,
+            bool typeParameter,
+            string parameterName = null)
+        {
+            bool res = true;
+            foreach (var category in cat)
+            {
+                res &= this.CreateSharedParameter(doc, Category.GetCategory(doc, category), nameSuffix, typeParameter, parameterName);
+            }
+            return res;
+        }
+
+            public Result Execute(
           ExternalCommandData commandData,
           ref string message,
           ElementSet elements)
@@ -224,12 +261,53 @@ namespace CourseWorkRevitAPI
             UIApplication app = commandData.Application;
             Document doc = app.ActiveUIDocument.Document;
 
+            string parameterName = "Огнестойкость";
+            List<BuiltInCategory> parameterCategories = new List<BuiltInCategory> {
+                BuiltInCategory.OST_Doors,
+                BuiltInCategory.OST_Walls,
+                BuiltInCategory.OST_Windows,
+                BuiltInCategory.OST_Floors,
+                BuiltInCategory.OST_Roofs,
+            };
+
             using (Transaction t = new Transaction(doc))
             {
-                t.Start("Create Shared Parameter");
+                // put variable in string
+                t.Start($"Check Parameter {parameterName}");
                 Category cat;
                 int i = 0;
+                //List<Element> elementsList;
 
+                var fec = new FilteredElementCollector(doc);
+                List<Element> sharedElementsList, elementList;
+
+
+                try
+                {
+                    //doors = new List<Element>(new FilteredElementCollector(doc).WhereElementIsNotElementType().OfCategory(BuiltInCategory.OST_Doors).ToElements());
+                    sharedElementsList = (List<Element>)(new FilteredElementCollector(doc).WhereElementIsNotElementType().OfClass(typeof(SharedParameterElement)).ToElements());
+                    elementList = (List<Element>)(new FilteredElementCollector(doc).WhereElementIsNotElementType().OfClass(typeof(ParameterElement)).ToElements());
+                }
+                catch (ArgumentNullException e)
+                {
+                    Console.WriteLine(e.Message);
+                    return Result.Failed;
+                }
+
+                List<Element> AllElements = sharedElementsList.Concat(elementList).ToList();
+
+                foreach (var element in AllElements)
+                {
+                    var parameters = element.GetParameters(parameterName);
+                    if (parameters.Count != 0)
+                    {
+                        string GoodMessage = $"Parameter {parameterName} was found. Plugin works well!";
+                        Debug.Print(GoodMessage);
+                        Util.InfoMsg(GoodMessage);
+                        return Result.Succeeded;
+                    }
+                }
+                
                 // create instance parameters:
 
                 foreach (BuiltInCategory target in targets)
@@ -241,11 +319,29 @@ namespace CourseWorkRevitAPI
                     }
                 }
 
+                string NotSoGoodMessage = $"Parameter {parameterName} wasn't found in document... Don't panic, we can create it automatically!";
+                Debug.Print(NotSoGoodMessage);
+                Util.InfoMsg(NotSoGoodMessage);
+
                 // create a type parameter:
 
-                cat = GetCategory(doc, BuiltInCategory.OST_Walls);
-                CreateSharedParameter(doc, cat, ++i, true);
-                t.Commit();
+                try
+                {
+                    CreateSharedParameter(doc, parameterCategories, null, false, parameterName);
+                    t.Commit();
+                }
+                catch
+                {
+                    string WrongMessage = "Something went wrong. Sad but true.";
+                    Debug.Print(WrongMessage);
+                    Util.InfoMsg(WrongMessage);
+                    t.RollBack();
+                    return Result.Failed;
+                }
+
+                string ExitMessage = "Well done. Good work";
+                Debug.Print(ExitMessage);
+                Util.InfoMsg(ExitMessage);
             }
 
             return Result.Succeeded;
