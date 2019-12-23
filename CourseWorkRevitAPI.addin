@@ -1,10 +1,10 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <RevitAddIns>
   <AddIn Type="Command">
-    <Text>Command CourseWorkRevitAPI</Text>
+    <Text>Command Check existance of parameter</Text>
     <Description>Some description for CourseWorkRevitAPI</Description>
     <Assembly>CourseWorkRevitAPI.dll</Assembly>
-    <FullClassName>CourseWorkRevitAPI.Command</FullClassName>
+    <FullClassName>CourseWorkRevitAPI.SharedParamCreator</FullClassName>
     <ClientId>9edf13b4-9d95-4522-b379-ad9ae7e2b1a3</ClientId>
     <VendorId>com.typepad.thebuildingcoder</VendorId>
     <VendorDescription>The Building Coder, http://thebuildingcoder.typepad.com</VendorDescription>

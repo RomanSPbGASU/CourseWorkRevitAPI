@@ -1,15 +1,12 @@
 #region Namespaces
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Selection;
+using System.Diagnostics;
 #endregion
 
-///
 namespace CourseWorkRevitAPI
 {
     [Transaction(TransactionMode.Manual)]
@@ -27,7 +24,7 @@ namespace CourseWorkRevitAPI
 
             // Access current selection
 
-            
+
             Selection sel = uidoc.Selection;
             // This is my mew file
 
@@ -43,7 +40,7 @@ namespace CourseWorkRevitAPI
 
             foreach (Element e in col)
             {
-                Debug.Print(e.Name);
+                Debug.Print("Element Name: " + e.Name);
             }
 
             // Modify document within a transaction
