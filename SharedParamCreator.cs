@@ -7,6 +7,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using System.Linq;
+using Autodesk.Revit.Exceptions;
 
 namespace CourseWorkRevitAPI
 {
@@ -17,6 +18,8 @@ namespace CourseWorkRevitAPI
         const string _groupname = "Coursework Parameters";
         const string _defname = "SP";
         public static List<Category> categories;
+        public static bool isSharedParamsCorrect = true;
+
         ParameterType _deftype = ParameterType.Number;
 
         BuiltInCategory[] targets = new BuiltInCategory[] {
@@ -110,9 +113,19 @@ namespace CourseWorkRevitAPI
             }
 
             // get the current shared params file object:
+            DefinitionFile file;
+            try
+            {
+                file = app.OpenSharedParameterFile();
+            }
+            catch (Exception ex)
+            {
+                SharedParamCreator.isSharedParamsCorrect = false;
+                string WrongMessage = "Shared parameter file isn't correct";
+                Debug.Print(WrongMessage);
+                throw new System.IO.IOException(WrongMessage);
+            }
 
-            DefinitionFile file
-              = app.OpenSharedParameterFile();
 
             if (null == file)
             {
@@ -246,9 +259,16 @@ namespace CourseWorkRevitAPI
             string parameterName = null)
         {
             bool res = true;
-            foreach (var category in cat)
+            try
             {
-                res &= this.CreateSharedParameter(doc, Category.GetCategory(doc, category), nameSuffix, typeParameter, parameterName);
+                foreach (var category in cat)
+                {
+                    res &= this.CreateSharedParameter(doc, Category.GetCategory(doc, category), nameSuffix, typeParameter, parameterName);
+                }
+            }
+            catch (System.IO.IOException ex)
+            {
+                throw ex;
             }
             return res;
         }
@@ -288,7 +308,7 @@ namespace CourseWorkRevitAPI
                     sharedElementsList = (List<Element>)(new FilteredElementCollector(doc).WhereElementIsNotElementType().OfClass(typeof(SharedParameterElement)).ToElements());
                     elementList = (List<Element>)(new FilteredElementCollector(doc).WhereElementIsNotElementType().OfClass(typeof(ParameterElement)).ToElements());
                 }
-                catch (ArgumentNullException e)
+                catch (Autodesk.Revit.Exceptions.ArgumentNullException e)
                 {
                     Console.WriteLine(e.Message);
                     return Result.Failed;
@@ -312,10 +332,21 @@ namespace CourseWorkRevitAPI
 
                 foreach (BuiltInCategory target in targets)
                 {
-                    cat = GetCategory(doc, target);
-                    if (null != cat)
+                    try
                     {
-                        CreateSharedParameter(doc, cat, ++i, false);
+                        cat = GetCategory(doc, target);
+                        if (null != cat)
+                        {
+                            CreateSharedParameter(doc, cat, ++i, false);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        string WrongMessage = "Something went wrong. Sad but true." + "\n" + ex.Message;
+                        Debug.Print(WrongMessage);
+                        Util.InfoMsg(WrongMessage);
+                        t.RollBack();
+                        return Result.Failed;
                     }
                 }
 
@@ -330,20 +361,21 @@ namespace CourseWorkRevitAPI
                     CreateSharedParameter(doc, parameterCategories, null, false, parameterName);
                     t.Commit();
                 }
-                catch
+                catch (Exception ex)
                 {
-                    string WrongMessage = "Something went wrong. Sad but true.";
+                    string WrongMessage = "Something went wrong. Sad but true." + "\n" + ex.Message;
                     Debug.Print(WrongMessage);
                     Util.InfoMsg(WrongMessage);
                     t.RollBack();
                     return Result.Failed;
                 }
 
+                t.Commit();
                 string ExitMessage = "Well done. Good work";
                 Debug.Print(ExitMessage);
                 Util.InfoMsg(ExitMessage);
-            }
 
+            }
             return Result.Succeeded;
         }
 
